@@ -1,0 +1,45 @@
+# --- secrets (never commit) ---
+.cam.env
+*.env
+.env.*
+!*.env.example
+
+# --- model files (large; TensorRT engines must be built on the Jetson) ---
+*.onnx
+*.engine
+*.pt
+*.wts
+*.zip
+
+# --- runtime data ---
+*.db
+*.db-wal
+*.db-shm
+snapshots/
+dashboard/media/*.mp4
+*.mp4
+logs/
+*.log
+perception/test/results/
+
+# --- Jetson-only checkouts / build output ---
+perception/DeepStream-Yolo/
+perception/export/out/
+
+# --- Python / Node ---
+__pycache__/
+*.pyc
+.venv/
+venv/
+node_modules/
+
+# --- backups and editor / OS files ---
+*.bak
+*.bak-*
+*.bak.*
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

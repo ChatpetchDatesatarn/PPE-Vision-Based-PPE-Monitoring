@@ -1,0 +1,18 @@
+[Unit]
+Description=AI Safety Monitoring autostart (DeepStream + CiRA)
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# cira-up alone takes ~2 min (splash settle + headless open/run); allow plenty of head-room.
+TimeoutStartSec=600
+# Only kill the main process on stop — never the DeepStream / CiRA / docker children it launched.
+KillMode=process
+User=jetson
+Environment=HOME=/home/jetson
+ExecStart=/home/jetson/safety/tools/safety-boot.sh
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,45 @@
+# Dashboard stack v3 — PC DEVELOPMENT (Windows/macOS Docker Desktop, bridge network).
+# Run:  docker compose -f docker-compose.dev.yml up -d --build
+# Open: http://localhost:8080          API docs: http://localhost:8080/api/docs
+# Test data: python tools/simulate_v3.py --host localhost   (MQTT on localhost:1883)
+# Test video: put an .mp4 at ./media/test.mp4 -> streams cam01 and cam02 (looped, re-encoded for WebRTC)
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0.18
+    ports: ["1883:1883"]
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+
+  recorder:
+    build: ./recorder
+    depends_on: [mosquitto]
+    environment:
+      - MQTT_HOST=mosquitto
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - MAX_SNAPSHOTS=3000
+      - SNAPSHOT_MAX_AGE_DAYS=30
+    volumes:
+      - dev-data:/data
+
+  dashboard:
+    image: nginx:1.27-alpine
+    depends_on: [mosquitto, recorder, mediamtx]
+    ports: ["8080:8080"]
+    volumes:
+      - ./web:/usr/share/nginx/html:ro
+      - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
+      - dev-data:/data:ro
+
+  mediamtx:
+    image: bluenviron/mediamtx:1.9.3-ffmpeg
+    ports:
+      - "8554:8554"
+      - "8189:8189/udp"
+      - "8189:8189/tcp"
+    volumes:
+      - ./mediamtx/mediamtx.dev.yml:/mediamtx.yml:ro
+      - ./media:/media:ro
+
+volumes:
+  dev-data:

@@ -1,0 +1,170 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>WHEP live monitor</title></head>
+<body>
+<video id="v" autoplay muted playsinline></video>
+<script>
+// Headless WHEP viewer for live_monitor.js. Connects like dashboard/web/js/webrtc.js does
+// (non-trickle offer after ICE gathering, 5 s grace on "disconnected", retry 5 s after a failure)
+// and posts one stats row every <interval> ms to the local sink.
+// Query: ?target=<absolute WHEP url>&sink=<absolute POST url>&interval=<ms>
+const Q = new URLSearchParams(location.search);
+const TARGET = Q.get("target");
+const SINK = Q.get("sink");
+const INTERVAL = parseInt(Q.get("interval") || "10000", 10);
+const GRACE_MS = 5000, RETRY_MS = 5000;   // = DISCONNECT_GRACE_MS / CONFIG.WEBRTC_RETRY_S in the Dashboard
+const STALL_MS = 5000;                     // v4 item4: framesDecoded flat this long (while connected) = stalled
+const v = document.getElementById("v");
+
+let pc = null, session = null, gen = 0, sessions = 0, graceTimer = null, retryTimer = null;
+let connectStart = 0, ttff = "";            // time to first rendered frame of the current session
+let lastFrameAt = 0;                        // performance.now() of the last rendered frame
+let lastFrameMedia = -1;                    // mediaTime of the last rendered frame (frozen picture = no change)
+// counters of sessions already closed, so the CSV columns are cumulative across reconnects
+const done = { framesDecoded: 0, freezeCount: 0, totalFreezesDuration: 0, keyFramesDecoded: 0, packetsLost: 0 };
+let cur = { framesDecoded: 0, freezeCount: 0, totalFreezesDuration: 0, keyFramesDecoded: 0, packetsLost: 0 };
+let prevTotalFrames = 0, prevSampleAt = performance.now();
+// v4 item4: stall detection (framesDecoded not advancing while "connected")
+let lastProgressAt = performance.now(), lastFramesTotal = 0, stalledNow = false, stalledTotalS = 0;
+const fps10 = [];   // ring of {t, f} over ~10 s for decoded_fps_10s
+
+function post(obj) {
+  fetch(SINK, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(obj) }).catch(() => {});
+}
+function note(event, detail) { post({ event: event, detail: detail || "", ts: new Date().toISOString() }); }
+
+function onFrame(now, meta) {
+  if (ttff === "") ttff = ((now - connectStart) / 1000).toFixed(2);
+  if (meta.mediaTime !== lastFrameMedia) { lastFrameAt = now; lastFrameMedia = meta.mediaTime; }
+  v.requestVideoFrameCallback(onFrame);
+}
+
+function teardown() {
+  clearTimeout(graceTimer); clearTimeout(retryTimer);
+  for (const k in done) done[k] += cur[k];
+  cur = { framesDecoded: 0, freezeCount: 0, totalFreezesDuration: 0, keyFramesDecoded: 0, packetsLost: 0 };
+  if (session) fetch(session, { method: "DELETE" }).catch(() => {});
+  if (pc) { try { pc.close(); } catch (e) {} }
+  pc = null; session = null; gen++;
+}
+function fail(reason) {
+  note("fail", reason);
+  teardown();
+  retryTimer = setTimeout(connect, RETRY_MS);
+}
+function waitIceGathering(p) {
+  if (p.iceGatheringState === "complete") return Promise.resolve();
+  return new Promise((res) => {
+    const t = setTimeout(res, 3000);
+    p.addEventListener("icegatheringstatechange", () => { if (p.iceGatheringState === "complete") { clearTimeout(t); res(); } });
+  });
+}
+
+async function connect() {
+  teardown();
+  const g = gen;
+  sessions++; ttff = ""; connectStart = performance.now();
+  try {
+    const p = new RTCPeerConnection({ iceServers: [] });
+    pc = p;
+    p.addTransceiver("video", { direction: "recvonly" });
+    p.addTransceiver("audio", { direction: "recvonly" });
+    p.ontrack = (e) => {
+      if (e.track.kind !== "video") return;
+      v.srcObject = e.streams[0] || new MediaStream([e.track]);
+      v.play().catch(() => {});
+    };
+    p.onconnectionstatechange = () => {
+      if (g !== gen) return;
+      const s = p.connectionState;
+      if (s === "connected") clearTimeout(graceTimer);
+      else if (s === "failed" || s === "closed") fail("connection " + s);
+      else if (s === "disconnected") {
+        clearTimeout(graceTimer);
+        graceTimer = setTimeout(() => g === gen && fail("disconnected"), GRACE_MS);
+      }
+    };
+    const offer = await p.createOffer();
+    await p.setLocalDescription(offer);
+    await waitIceGathering(p);
+    if (g !== gen) return;
+    const res = await fetch(TARGET, { method: "POST", headers: { "Content-Type": "application/sdp" }, body: p.localDescription.sdp });
+    if (g !== gen) return;
+    if (!res.ok) return fail("WHEP HTTP " + res.status);
+    const loc = res.headers.get("Location");
+    if (loc) {
+      // MediaMTX answers "/cam01/whep/<id>", which does not know about the nginx /webrtc/ prefix
+      try { const u = new URL(loc, TARGET); if (!u.pathname.startsWith("/webrtc/")) u.pathname = "/webrtc" + u.pathname; session = u.href; } catch (e) {}
+    }
+    await p.setRemoteDescription({ type: "answer", sdp: await res.text() });
+  } catch (e) {
+    if (g === gen) fail(e && e.message || String(e));
+  }
+}
+
+// v4 item4: poll getStats every 1 s so a stall (framesDecoded flat) is caught within STALL_MS
+async function pollStats() {
+  const now = performance.now();
+  if (pc) {
+    try {
+      const st = await pc.getStats();
+      st.forEach((r) => {
+        if (r.type === "inbound-rtp" && r.kind === "video") {
+          cur = { framesDecoded: r.framesDecoded || 0, freezeCount: r.freezeCount || 0,
+                  totalFreezesDuration: r.totalFreezesDuration || 0, keyFramesDecoded: r.keyFramesDecoded || 0,
+                  packetsLost: r.packetsLost || 0 };
+        }
+      });
+    } catch (e) {}
+  }
+  const total = done.framesDecoded + cur.framesDecoded;
+  if (total > lastFramesTotal) {
+    lastFramesTotal = total; lastProgressAt = now; stalledNow = false;
+  } else if (pc && pc.connectionState === "connected" && now - lastProgressAt >= STALL_MS) {
+    if (!stalledNow) {
+      stalledNow = true;
+      note("stall", "no decoded frame " + ((now - lastProgressAt) / 1000).toFixed(1) + " s -> reconnect");
+      stallReconnect();
+    }
+  }
+  if (stalledNow) stalledTotalS += 1;    // ~1 s per tick while stalled
+  fps10.push({ t: now, f: total });
+  while (fps10.length > 1 && now - fps10[0].t > 10000) fps10.shift();
+}
+function stallReconnect() {
+  teardown();
+  lastProgressAt = performance.now();
+  retryTimer = setTimeout(connect, 1000);
+}
+function sample() {
+  const now = performance.now();
+  const total = done.framesDecoded + cur.framesDecoded;
+  const fps = (total - prevTotalFrames) / ((now - prevSampleAt) / 1000);
+  prevTotalFrames = total; prevSampleAt = now;
+  let f10 = "";
+  if (fps10.length > 1) {
+    const a = fps10[0], b = fps10[fps10.length - 1], dt = (b.t - a.t) / 1000;
+    if (dt > 0) f10 = ((b.f - a.f) / dt).toFixed(1);
+  }
+  post({
+    timestamp: new Date().toISOString(),
+    connected: pc ? pc.connectionState : "retry-wait",
+    time_to_first_frame_s: ttff,
+    framesDecoded: total,
+    framesPerSecond: fps.toFixed(1),
+    freezeCount: done.freezeCount + cur.freezeCount,
+    totalFreezesDuration_s: (done.totalFreezesDuration + cur.totalFreezesDuration).toFixed(3),
+    keyFramesDecoded: done.keyFramesDecoded + cur.keyFramesDecoded,
+    packetsLost: done.packetsLost + cur.packetsLost,
+    reconnects: Math.max(0, sessions - 1),
+    last_frame_age_s: lastFrameAt ? ((now - lastFrameAt) / 1000).toFixed(1) : "",
+    stalled: stalledNow ? 1 : 0,
+    stalled_total_s: stalledTotalS,
+    decoded_fps_10s: f10,
+  });
+}
+
+v.requestVideoFrameCallback(onFrame);
+connect();
+setInterval(pollStats, 1000);
+setInterval(sample, INTERVAL);
+</script></body></html>

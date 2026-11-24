@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Factory Safety Monitoring</title>
+<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<style>
+  :root{--bg:#0f172a;--card:#1e293b;--line:#334155;--txt:#e2e8f0;--mut:#94a3b8;
+        --red:#ef4444;--amb:#f59e0b;--grn:#22c55e;--blu:#3b82f6;--gry:#64748b}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,"Segoe UI",Tahoma,sans-serif;background:var(--bg);color:var(--txt)}
+  header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;
+         padding:12px 20px;border-bottom:1px solid var(--line)}
+  h1{font-size:18px;margin:0}
+  h3{margin:0 0 10px;font-size:15px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  input,select,button{font:inherit;background:#0b1222;color:var(--txt);border:1px solid var(--line);
+         border-radius:6px;padding:6px 10px}
+  button{cursor:pointer;background:#273449}
+  button:hover{background:#334155}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--gry);display:inline-block;flex:none}
+  main{padding:16px 20px;display:grid;gap:16px}
+  .top{display:grid;grid-template-columns:minmax(0,3fr) minmax(280px,2fr);gap:16px}
+  @media (max-width:900px){.top{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0}
+  .live{position:relative;background:#000;border-radius:8px;aspect-ratio:16/9;display:flex;
+        align-items:center;justify-content:center;overflow:hidden}
+  .live img{width:100%;height:100%;object-fit:contain;display:none}
+  .live .nosig{color:var(--mut);font-size:14px;text-align:center;padding:20px}
+  .badge-live{position:absolute;top:10px;left:10px;background:var(--red);color:#fff;font-size:12px;
+        font-weight:700;padding:2px 8px;border-radius:4px;display:none}
+  .meta{position:absolute;top:10px;right:10px;background:rgba(0,0,0,.6);font-size:12px;padding:2px 8px;border-radius:4px}
+  .stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px}
+  .stat{background:#0b1222;border:1px solid var(--line);border-radius:8px;padding:10px}
+  .stat b{display:block;font-size:24px}
+  .stat span{color:var(--mut);font-size:12px}
+  .recent{display:grid;gap:8px;max-height:430px;overflow:auto}
+  .rcard{display:flex;gap:10px;background:#0b1222;border:1px solid var(--line);border-radius:8px;padding:8px;cursor:pointer}
+  .rcard img,.rcard .ph{width:96px;height:64px;object-fit:cover;border-radius:4px;background:#000;flex:none}
+  .rcard .info{min-width:0;font-size:13px;display:grid;gap:3px}
+  .badge{padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap;display:inline-block}
+  .t-restricted_zone{background:#7f1d1d;color:#fecaca}
+  .t-no_helmet,.t-no_vest{background:#78350f;color:#fde68a}
+  .t-unknown_visibility{background:#334155;color:#cbd5e1}
+  .s-open{color:var(--red)} .s-resolved{color:var(--grn)} .s-false_alarm{color:var(--mut)}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+  th{color:var(--mut);font-weight:500}
+  td img.thumb{width:80px;height:54px;object-fit:cover;border-radius:4px;cursor:zoom-in;background:#000;display:block}
+  tr.new{animation:flash 1.2s}
+  @keyframes flash{from{background:#7f1d1d}to{background:transparent}}
+  .scroll{overflow-x:auto}
+  .muted{color:var(--mut);font-size:13px}
+  #modal{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;
+         z-index:10;padding:16px;flex-direction:column;gap:10px}
+  #modal img{max-width:100%;max-height:80vh;border-radius:6px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Factory Safety Monitoring</h1>
+  <div class="row">
+    <span class="dot" id="connDot" title="สถานะการเชื่อมต่อ"></span>
+    <input id="url" size="30" aria-label="MQTT WebSocket URL">
+    <button id="connectBtn">เชื่อมต่อ</button>
+  </div>
+</header>
+
+<main>
+  <section class="top">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px">
+        <h3 style="margin:0">ภาพตรวจจับแบบ Real-time</h3>
+        <div class="row">
+          <select id="camSel" aria-label="เลือกกล้อง"><option value="">— ยังไม่มีกล้อง —</option></select>
+          <button id="pauseBtn">หยุดภาพ</button>
+        </div>
+      </div>
+      <div class="live">
+        <img id="liveImg" alt="ภาพสดจากกล้อง">
+        <div class="nosig" id="noSig">ยังไม่มีภาพจากกล้อง<br><span class="muted">รอ CiRA CORE ส่งภาพมาที่ factory/safety/&lt;cam&gt;/frame</span></div>
+        <span class="badge-live" id="liveBadge">LIVE</span>
+        <span class="meta" id="liveMeta">–</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="stats">
+        <div class="stat"><b id="sOpen">0</b><span>ยังไม่ปิด</span></div>
+        <div class="stat"><b id="sZone">0</b><span>เข้าเขตหวงห้าม (วันนี้)</span></div>
+        <div class="stat"><b id="sPPE">0</b><span>ไม่สวม PPE (วันนี้)</span></div>
+        <div class="stat"><b id="sFA">–</b><span>False alarm rate</span></div>
+      </div>
+      <div class="row" style="justify-content:space-between;margin-bottom:8px">
+        <h3 style="margin:0">เหตุการณ์ล่าสุด</h3>
+        <label class="muted"><input type="checkbox" id="soundChk"> เสียงเตือนบนหน้าเว็บ</label>
+      </div>
+      <div class="recent" id="recent"><span class="muted">ยังไม่มีเหตุการณ์</span></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="row" style="margin-bottom:10px">
+      <h3 style="margin:0;flex:1">ประวัติเหตุการณ์</h3>
+      <select id="fType" aria-label="กรองประเภท">
+        <option value="">ทุกประเภท</option>
+        <option value="restricted_zone">เข้าเขตหวงห้าม</option>
+        <option value="no_helmet">ไม่สวมหมวก</option>
+        <option value="no_vest">ไม่สวมเสื้อสะท้อนแสง</option>
+        <option value="unknown_visibility">ตรวจสอบไม่ได้</option>
+      </select>
+      <select id="fStatus" aria-label="กรองสถานะ">
+        <option value="">ทุกสถานะ</option>
+        <option value="open">ยังไม่ปิด</option>
+        <option value="resolved">แก้ไขแล้ว</option>
+        <option value="false_alarm">แจ้งเตือนผิด</option>
+      </select>
+      <button id="reloadBtn">โหลดประวัติใหม่</button>
+      <button id="csvBtn">Export CSV</button>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>ภาพ</th><th>เวลา</th><th>กล้อง/โซน</th><th>ประเภท</th><th>Track</th><th>Conf.</th><th>สถานะ</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <p class="muted" id="histNote">ประวัติเก็บบน Jetson (recorder) — เปิดจากเครื่องไหนก็เห็นเหมือนกัน</p>
+  </section>
+</main>
+
+<div id="modal" role="dialog" aria-label="ภาพเหตุการณ์">
+  <img id="modalImg" alt="">
+  <div id="modalCap" class="muted"></div>
+  <button id="modalClose">ปิด</button>
+</div>
+
+<script>
+const TYPE_TH = {restricted_zone:"เข้าเขตหวงห้าม", no_helmet:"ไม่สวมหมวกนิรภัย",
+                 no_vest:"ไม่สวมเสื้อสะท้อนแสง", unknown_visibility:"ตรวจสอบไม่ได้"};
+const STATUS_TH = {open:"ยังไม่ปิด", resolved:"แก้ไขแล้ว", false_alarm:"แจ้งเตือนผิด"};
+const MAX = 1000;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+let events = [];            // newest first
+let client = null, newestId = null;
+let paused = false, selCam = "", cams = new Set();
+let lastFrameUrl = null, frameTimes = [], lastFrameAt = 0;
+const viaHttp = location.protocol.startsWith("http");
+
+function isToday(ts){ const d=new Date(ts), n=new Date(); return d.toDateString()===n.toDateString(); }
+function fmtTime(ts){ const d=new Date(ts); return isNaN(d)? esc(ts) : d.toLocaleString("th-TH",{hour12:false}); }
+function nowIso(){
+  const d=new Date(), off=-d.getTimezoneOffset(), s=off>=0?"+":"-", a=Math.abs(off), p=n=>String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}${s}${p(a/60|0)}:${p(a%60)}`;
+}
+function imgSrc(e){ return e._img || e.snapshot || ""; }
+
+// ---------- Connection ----------
+function defaultUrl(){
+  if (viaHttp && location.host) return `${location.protocol==="https:"?"wss":"ws"}://${location.host}/mqtt`;
+  return "ws://localhost:9001";
+}
+function initUrl(){
+  let u = defaultUrl();
+  try{
+    const saved = localStorage.getItem("safety_url_v2");
+    const staleLocal = /\/\/(localhost|127\.0\.0\.1)[:/]/.test(saved||"") && viaHttp && !["localhost","127.0.0.1"].includes(location.hostname);
+    if (saved && !staleLocal) u = saved;
+  }catch(e){}
+  $("url").value = u;
+}
+function setDot(c){ $("connDot").style.background=c; }
+
+function connect(){
+  if (client){ client.end(true); client=null; }
+  const url = $("url").value.trim();
+  try{ if (url !== defaultUrl()) localStorage.setItem("safety_url_v2", url); else localStorage.removeItem("safety_url_v2"); }catch(e){}
+  setDot("var(--amb)");
+  client = mqtt.connect(url, {clientId:"dash-"+Math.random().toString(16).slice(2,8), reconnectPeriod:3000});
+  client.on("connect", ()=>{
+    setDot("var(--grn)");
+    client.subscribe(["factory/safety/+/event","factory/safety/ack","factory/safety/+/status"], {qos:1});
+    if (!paused) client.subscribe("factory/safety/+/frame", {qos:0});
+  });
+  client.on("reconnect", ()=>setDot("var(--amb)"));
+  client.on("close", ()=>setDot("var(--red)"));
+  client.on("error", ()=>setDot("var(--red)"));
+  client.on("message", onMessage);
+}
+
+function onMessage(topic, payload){
+  const parts = topic.split("/"), cam = parts[2], kind = parts[3];
+  if (kind === "frame") return onFrame(cam, payload);
+  let m; try{ m = JSON.parse(new TextDecoder().decode(payload)); }catch(e){ return; }
+  if (kind === "event") addEvent(m, cam);
+  else if (topic === "factory/safety/ack") applyAck(m);
+  else if (kind === "status") addCam(cam);
+}
+
+// ---------- Live view ----------
+function addCam(cam){
+  if (!cam || cams.has(cam)) return;
+  cams.add(cam);
+  const sel = $("camSel");
+  if (sel.options.length===1 && !sel.options[0].value) sel.innerHTML = "";
+  sel.insertAdjacentHTML("beforeend", `<option value="${esc(cam)}">${esc(cam)}</option>`);
+  if (!selCam){ selCam = cam; sel.value = cam; }
+}
+function onFrame(cam, payload){
+  addCam(cam);
+  if (paused || cam !== selCam) return;
+  const url = URL.createObjectURL(new Blob([payload], {type:"image/jpeg"}));
+  const img = $("liveImg"), prev = lastFrameUrl;
+  img.onload = ()=>{ if (prev) URL.revokeObjectURL(prev); };
+  img.src = url; lastFrameUrl = url;
+  img.style.display = "block"; $("noSig").style.display = "none";
+  const t = performance.now(); lastFrameAt = Date.now();
+  frameTimes.push(t); while (frameTimes.length && t - frameTimes[0] > 3000) frameTimes.shift();
+}
+setInterval(()=>{
+  const age = (Date.now() - lastFrameAt)/1000, live = lastFrameAt && age < 3 && !paused;
+  $("liveBadge").style.display = live ? "block" : "none";
+  const fps = frameTimes.length > 1 ? (frameTimes.length-1)/((frameTimes[frameTimes.length-1]-frameTimes[0])/1000) : 0;
+  $("liveMeta").textContent = paused ? "หยุดภาพ" : !lastFrameAt ? "–" :
+      live ? `${selCam} · ${fps.toFixed(1)} fps` : `ไม่มีภาพใหม่ ${age.toFixed(0)} วินาที`;
+}, 500);
+
+$("pauseBtn").onclick = ()=>{
+  paused = !paused;
+  $("pauseBtn").textContent = paused ? "เล่นภาพต่อ" : "หยุดภาพ";
+  if (client && client.connected){
+    if (paused) client.unsubscribe("factory/safety/+/frame");   // save bandwidth
+    else client.subscribe("factory/safety/+/frame", {qos:0});
+  }
+};
+$("camSel").onchange = e => { selCam = e.target.value; lastFrameAt = 0; frameTimes = []; };
+
+// ---------- Events ----------
+function addEvent(m, cam){
+  if (!m.event_id) m.event_id = (m.camera_id||cam||"cam")+"-"+Date.now();
+  if (events.some(e=>e.event_id===m.event_id)) return;
+  m.camera_id = m.camera_id || cam;
+  addCam(m.camera_id);
+  if (m.snapshot_b64){ m._img = "data:image/jpeg;base64," + m.snapshot_b64; delete m.snapshot_b64; }
+  m.ts = m.ts || nowIso(); m.status = m.status || "open";
+  events.unshift(m); if (events.length > MAX) events.length = MAX;
+  newestId = m.event_id;
+  if ($("soundChk").checked && m.type !== "unknown_visibility") beep(m.type === "restricted_zone");
+  render();
+}
+function applyAck(a){
+  const e = events.find(x=>x.event_id===a.event_id); if (!e) return;
+  e.status = a.status || "resolved"; e.ack_by = a.by || ""; e.ack_ts = a.ts || nowIso();
+  render();
+}
+function sendAck(eventId, status){
+  const a = {event_id:eventId, status, by:"dashboard", note:"", ts:nowIso()};
+  applyAck(a);
+  if (client && client.connected) client.publish("factory/safety/ack", JSON.stringify(a), {qos:1});
+}
+async function loadHistory(){
+  if (!viaHttp){ $("histNote").textContent = "เปิดเป็นไฟล์ในเครื่อง: เห็นเฉพาะเหตุการณ์ใหม่ (ประวัติอยู่บน Jetson ที่ http://<Jetson>:8080)"; return; }
+  try{
+    const r = await fetch("data/events.json", {cache:"no-store"});
+    if (!r.ok) throw new Error(r.status);
+    const hist = await r.json();
+    const known = new Map(events.map(e=>[e.event_id,e]));
+    for (const h of hist){
+      const cur = known.get(h.event_id);
+      if (cur){ if (!cur._img) cur.snapshot = h.snapshot; if (h.status !== "open") Object.assign(cur, {status:h.status, ack_by:h.ack_by, ack_ts:h.ack_ts}); }
+      else { events.push(h); addCam(h.camera_id); }
+    }
+    events.sort((a,b)=> new Date(b.ts) - new Date(a.ts));
+    if (events.length > MAX) events.length = MAX;
+    $("histNote").textContent = `ประวัติเก็บบน Jetson (recorder) — โหลด ${hist.length} รายการ`;
+    render();
+  }catch(e){ $("histNote").textContent = "โหลดประวัติจาก Jetson ไม่ได้ (recorder ยังไม่ทำงาน?) — แสดงเฉพาะเหตุการณ์ใหม่"; }
+}
+
+// ---------- Render ----------
+function render(){
+  const fT=$("fType").value, fS=$("fStatus").value;
+  const list = events.filter(e=>(!fT||e.type===fT)&&(!fS||e.status===fS)).slice(0,300);
+  $("rows").innerHTML = list.map(e=>`
+    <tr class="${e.event_id===newestId?"new":""}">
+      <td>${imgSrc(e)?`<img class="thumb" loading="lazy" src="${esc(imgSrc(e))}" data-zoom="${esc(e.event_id)}" alt="">`:`<span class="muted">–</span>`}</td>
+      <td>${fmtTime(e.ts)}</td>
+      <td>${esc(e.camera_id)}${e.zone_id?" / "+esc(e.zone_id):""}</td>
+      <td><span class="badge t-${esc(e.type)}">${esc(TYPE_TH[e.type]||e.type)}</span></td>
+      <td>${esc(e.track_id ?? "")}</td>
+      <td>${e.confidence!=null? Number(e.confidence).toFixed(2):""}</td>
+      <td class="s-${esc(e.status)}">${STATUS_TH[e.status]||esc(e.status)}${e.ack_by?` <span class="muted">(${esc(e.ack_by)})</span>`:""}</td>
+      <td style="white-space:nowrap">${e.status==="open"?`
+        <button data-ack="${esc(e.event_id)}" data-st="resolved">แก้ไขแล้ว</button>
+        <button data-ack="${esc(e.event_id)}" data-st="false_alarm">แจ้งผิด</button>`:""}</td>
+    </tr>`).join("") || `<tr><td colspan="8" class="muted">ยังไม่มีเหตุการณ์</td></tr>`;
+
+  const recent = events.slice(0,8);
+  $("recent").innerHTML = recent.map(e=>`
+    <div class="rcard" data-zoom="${esc(e.event_id)}">
+      ${imgSrc(e)?`<img loading="lazy" src="${esc(imgSrc(e))}" alt="">`:`<div class="ph"></div>`}
+      <div class="info">
+        <span><span class="badge t-${esc(e.type)}">${esc(TYPE_TH[e.type]||e.type)}</span></span>
+        <span>${fmtTime(e.ts)}</span>
+        <span class="muted">${esc(e.camera_id)}${e.zone_id?" / "+esc(e.zone_id):""} · <span class="s-${esc(e.status)}">${STATUS_TH[e.status]||esc(e.status)}</span></span>
+      </div>
+    </div>`).join("") || `<span class="muted">ยังไม่มีเหตุการณ์</span>`;
+  newestId = null;
+
+  const today = events.filter(e=>isToday(e.ts));
+  $("sOpen").textContent = events.filter(e=>e.status==="open").length;
+  $("sZone").textContent = today.filter(e=>e.type==="restricted_zone").length;
+  $("sPPE").textContent  = today.filter(e=>e.type==="no_helmet"||e.type==="no_vest").length;
+  const closed = events.filter(e=>e.status!=="open" && e.type!=="unknown_visibility");
+  const fa = closed.filter(e=>e.status==="false_alarm").length;
+  $("sFA").textContent = closed.length ? (100*fa/closed.length).toFixed(1)+"%" : "–";
+}
+
+function openModal(id){
+  const e = events.find(x=>x.event_id===id); if (!e || !imgSrc(e)) return;
+  $("modalImg").src = imgSrc(e);
+  $("modalCap").textContent = `${TYPE_TH[e.type]||e.type} · ${fmtTime(e.ts)} · ${e.camera_id||""}${e.zone_id?" / "+e.zone_id:""}`;
+  $("modal").style.display = "flex";
+}
+function closeModal(){ $("modal").style.display = "none"; }
+
+function exportCsv(){
+  const cols = ["event_id","ts","camera_id","zone_id","type","track_id","confidence","snapshot","status","ack_by","ack_ts"];
+  const q = v => `"${String(v ?? "").replace(/"/g,'""')}"`;
+  const csv = "﻿" + [cols.join(","), ...events.slice().reverse().map(e=>cols.map(c=>q(e[c])).join(","))].join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+  a.download = `safety_events_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+let audioCtx = null;
+function beep(urgent){
+  try{
+    audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
+    const n = urgent ? 3 : 1;
+    for (let i=0;i<n;i++){
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain(), t = audioCtx.currentTime + i*0.25;
+      o.frequency.value = urgent ? 1200 : 880; o.connect(g); g.connect(audioCtx.destination);
+      g.gain.setValueAtTime(0.15, t); g.gain.exponentialRampToValueAtTime(0.001, t+0.18);
+      o.start(t); o.stop(t+0.2);
+    }
+  }catch(e){}
+}
+
+// ---------- Wire up ----------
+document.addEventListener("click", ev=>{
+  const b = ev.target.closest("button");
+  if (b && b.dataset.ack){ sendAck(b.dataset.ack, b.dataset.st); return; }
+  const z = ev.target.closest("[data-zoom]");
+  if (z) openModal(z.dataset.zoom);
+});
+$("modal").onclick = ev => { if (ev.target.id==="modal" || ev.target.id==="modalClose") closeModal(); };
+document.addEventListener("keydown", ev => { if (ev.key==="Escape") closeModal(); });
+$("connectBtn").onclick = connect;
+$("fType").onchange = render; $("fStatus").onchange = render;
+$("csvBtn").onclick = exportCsv;
+$("reloadBtn").onclick = loadHistory;
+try{ $("soundChk").checked = localStorage.getItem("safety_sound")==="1"; }catch(e){}
+$("soundChk").onchange = e => { try{ localStorage.setItem("safety_sound", e.target.checked?"1":"0"); }catch(_){} if (e.target.checked) beep(false); };
+
+initUrl();
+render();
+loadHistory();
+connect();
+</script>
+</body>
+</html>

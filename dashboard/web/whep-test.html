@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WHEP video test</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 16px; background: #0f1720; color: #e6edf3; font: 14px system-ui, sans-serif; }
+  .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  input, button { font: inherit; padding: 6px 10px; border-radius: 6px; border: 1px solid #334155; background: #1e293b; color: inherit; }
+  button { cursor: pointer; }
+  video { width: 100%; max-width: 960px; aspect-ratio: 16 / 9; background: #000; border-radius: 8px; display: block; }
+  #log { white-space: pre-wrap; color: #94a3b8; font-family: ui-monospace, monospace; font-size: 12px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <label>path <input id="path" value="cam01" size="8"></label>
+  <button id="play">Play</button>
+  <button id="stop">Stop</button>
+</div>
+<video id="v" muted autoplay playsinline></video>
+<div id="log"></div>
+
+<script>
+// Minimal WHEP player for MediaMTX (non-trickle ICE). Reuse this in the real Dashboard.
+// Signalling goes to /webrtc/<path>/whep through nginx; media goes to UDP/TCP 8189 directly.
+const $ = (id) => document.getElementById(id);
+const log = (m) => { $("log").textContent += new Date().toLocaleTimeString() + "  " + m + "\n"; };
+let pc = null;
+
+async function play(path) {
+  stop();
+  pc = new RTCPeerConnection();
+  pc.addTransceiver("video", { direction: "recvonly" });
+  pc.ontrack = (e) => { $("v").srcObject = e.streams[0]; };
+  pc.onconnectionstatechange = () => {
+    log("connection: " + pc.connectionState);
+    if (pc.connectionState === "failed") log("ล้มเหลว: เช็ก UDP/TCP 8189 และ webrtcAdditionalHosts ของ MediaMTX");
+  };
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  await new Promise((resolve) => {                       // wait for ICE candidates (max 2 s)
+    if (pc.iceGatheringState === "complete") return resolve();
+    pc.addEventListener("icegatheringstatechange", () => pc.iceGatheringState === "complete" && resolve());
+    setTimeout(resolve, 2000);
+  });
+  const res = await fetch(`/webrtc/${encodeURIComponent(path)}/whep`, {
+    method: "POST", headers: { "Content-Type": "application/sdp" }, body: pc.localDescription.sdp,
+  });
+  if (!res.ok) { log(`WHEP ${res.status}: ไม่มีสตรีม "${path}" หรือ MediaMTX ไม่ทำงาน`); stop(); return; }
+  await pc.setRemoteDescription({ type: "answer", sdp: await res.text() });
+  log("answer received for " + path);
+}
+
+function stop() {
+  if (pc) { pc.close(); pc = null; }
+  $("v").srcObject = null;
+}
+
+$("play").onclick = () => play($("path").value.trim()).catch((e) => log("error: " + e.message));
+$("stop").onclick = stop;
+</script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+# Second nvinfer of the two-model app ("way A", temporary until the next ppe3 model passes):
+# helmet / vest only from yolov8n_ppe3_416; people come from the COCO model (gie-unique-id=1).
+# Copy of config_infer_yolov8n_ppe3_416.txt (2026-10-15, P3 thresholds) with:
+#   gie-unique-id=2, process-mode=1 (full frame), filter-out-class-ids=0 (drop ppe3 "person"), interval=1
+# Uses the existing engine only: onnx-file is left out on purpose, so if the engine cannot be
+# deserialized nvinfer fails instead of building a new one.
+[property]
+gpu-id=0
+net-scale-factor=0.0039215697906911373
+model-color-format=0
+model-engine-file=/home/jetson/safety/perception/models/yolov8n_ppe3_416/yolov8n_ppe3_416_b1_gpu0_fp16.engine
+labelfile-path=/home/jetson/safety/perception/models/yolov8n_ppe3_416/labels.txt
+batch-size=1
+# 2 = FP16 (Jetson Nano has no fast INT8)
+network-mode=2
+num-detected-classes=3
+# detect every (interval+1) frames; the app does not override this one (--interval is for the person model)
+interval=1
+gie-unique-id=2
+process-mode=1
+network-type=0
+cluster-mode=2
+# same letterbox as Ultralytics training — keep both lines
+maintain-aspect-ratio=1
+symmetric-padding=1
+parse-bbox-func-name=NvDsInferParseYolo
+custom-lib-path=/home/jetson/safety/perception/DeepStream-Yolo/nvdsinfer_custom_impl_Yolo/libnvdsinfer_custom_impl_Yolo.so
+engine-create-func-name=NvDsInferYoloCudaEngineGet
+# class 0 = person: not used from this model
+filter-out-class-ids=0
+
+# NMS / topk the same for every class; pre-cluster-threshold per class (same as P3)
+[class-attrs-all]
+nms-iou-threshold=0.45
+topk=300
+
+# person (filtered out above)
+[class-attrs-0]
+pre-cluster-threshold=0.30
+nms-iou-threshold=0.45
+topk=300
+
+# helmet
+[class-attrs-1]
+pre-cluster-threshold=0.40
+nms-iou-threshold=0.45
+topk=300
+
+# vest
+[class-attrs-2]
+pre-cluster-threshold=0.35
+nms-iou-threshold=0.45
+topk=300

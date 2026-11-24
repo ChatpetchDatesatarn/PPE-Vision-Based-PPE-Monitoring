@@ -1,0 +1,17 @@
+# Install:
+#   sudo install -m 755 hdmi-autogui.sh /usr/local/bin/
+#   sudo cp hdmi-autogui.service /etc/systemd/system/
+#   sudo systemctl set-default multi-user.target
+#   sudo systemctl daemon-reload && sudo systemctl enable --now hdmi-autogui
+[Unit]
+Description=Start GUI when HDMI is connected, stop when disconnected
+After=systemd-user-sessions.service
+
+[Service]
+# Environment=HDMI_STATUS_FILE=/sys/class/drm/card0-HDMI-A-1/status
+ExecStart=/usr/local/bin/hdmi-autogui.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

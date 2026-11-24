@@ -1,0 +1,29 @@
+[property]
+gpu-id=0
+net-scale-factor=0.0039215697906911373
+model-color-format=0
+onnx-file=/home/jetson/safety/perception/models/yolo11n_ppe3_416/yolo11n_ppe3_416.onnx
+model-engine-file=/home/jetson/safety/perception/models/yolo11n_ppe3_416/yolo11n_ppe3_416_b1_gpu0_fp16.engine
+labelfile-path=/home/jetson/safety/perception/models/yolo11n_ppe3_416/labels.txt
+batch-size=1
+# 2 = FP16 (Jetson Nano has no fast INT8)
+network-mode=2
+num-detected-classes=3
+# detect every (interval+1) frames; 1 = every other frame, tracker fills the gaps
+interval=1
+gie-unique-id=1
+process-mode=1
+network-type=0
+cluster-mode=2
+# same letterbox as Ultralytics training — keep both lines
+maintain-aspect-ratio=1
+symmetric-padding=1
+parse-bbox-func-name=NvDsInferParseYolo
+custom-lib-path=/home/jetson/safety/perception/DeepStream-Yolo/nvdsinfer_custom_impl_Yolo/libnvdsinfer_custom_impl_Yolo.so
+engine-create-func-name=NvDsInferYoloCudaEngineGet
+
+[class-attrs-all]
+nms-iou-threshold=0.45
+# from the F1-optimal confidence on the test set
+pre-cluster-threshold=0.38
+topk=300

@@ -1,0 +1,72 @@
+# Dashboard stack v3 — JETSON (production). For the PC use docker-compose.dev.yml.
+# Deploy:  cd ~/safety/dashboard && docker-compose up -d --build && docker image prune -f
+# First time only: stop the v2 stack first (same container names):  cd ~/safety/legacy/docker_v2 && docker-compose down   (NO -v)
+#
+# Ports (all network_mode: host):
+#   8080 nginx  -> /  /mqtt  /api  /webrtc  /data/snapshots
+#   1883 / 9001  mosquitto (MQTT / WebSocket)
+#   8000 recorder API (127.0.0.1 only, reached through nginx)
+#   8554 / 8889 / 8189udp+tcp  MediaMTX (RTSP / WebRTC HTTP / WebRTC media)
+#   8555 is reserved for the DeepStream RTSP output (not in this file)
+version: "2.3"
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0.18
+    container_name: mosquitto
+    network_mode: host
+    restart: unless-stopped
+    logging: &logging               # cap Docker logs: 3 x 10 MB per container
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+
+  recorder:
+    build: ./recorder
+    container_name: recorder
+    network_mode: host
+    restart: unless-stopped
+    logging: *logging
+    depends_on: [mosquitto]
+    environment:
+      - MQTT_HOST=localhost
+      - API_HOST=127.0.0.1
+      - API_PORT=8000
+      - MAX_SNAPSHOTS=3000          # ~100 KB each -> ~300 MB max on the microSD
+      - SNAPSHOT_MAX_AGE_DAYS=30
+      - DELETE_PIN=${DELETE_PIN}   # v6: PIN for deleting on the Dashboard; set in .env next to this file (chmod 600). Empty = delete disabled
+    volumes:
+      - safety-data:/data
+
+  dashboard:
+    image: nginx:1.27-alpine
+    container_name: dashboard
+    network_mode: host
+    restart: unless-stopped
+    logging: *logging
+    depends_on: [recorder, mediamtx]
+    volumes:
+      - ./web:/usr/share/nginx/html:ro
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - safety-data:/data:ro
+
+  mediamtx:
+    image: bluenviron/mediamtx:1.9.3
+    container_name: mediamtx
+    network_mode: host
+    restart: unless-stopped
+    logging: *logging
+    volumes:
+      - ./mediamtx/mediamtx.yml:/mediamtx.yml:ro
+
+# Re-use the v2 volumes so existing history/snapshots are kept (and migrated by the recorder).
+# If they do not exist yet:  docker volume create 11docker_safety-data && docker volume create 11docker_mosquitto-data
+volumes:
+  safety-data:
+    external:
+      name: 11docker_safety-data
+  mosquitto-data:
+    external:
+      name: 11docker_mosquitto-data

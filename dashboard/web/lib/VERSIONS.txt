@@ -1,0 +1,11 @@
+Third-party libraries (served locally; never loaded from a CDN at runtime)
+
+mqtt.min.js
+  package : mqtt (mqtt.js) 5.10.1 — browser build, exposes window.mqtt
+  source  : https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js
+  license : MIT
+
+chart.umd.min.js
+  package : chart.js 4.4.4 — UMD build (already minified), exposes window.Chart
+  source  : https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.js
+  license : MIT

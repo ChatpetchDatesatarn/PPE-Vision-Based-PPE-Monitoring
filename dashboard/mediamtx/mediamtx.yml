@@ -1,0 +1,39 @@
+# MediaMTX 1.9.x — JETSON. Pulls the DeepStream RTSP output (boxes already drawn) and serves it as WebRTC.
+# Check after start:  docker logs mediamtx   (an unknown key here makes MediaMTX refuse to start)
+logLevel: info
+
+api: yes
+apiAddress: 127.0.0.1:9997
+
+rtsp: yes
+rtspAddress: 127.0.0.1:8554        # localhost only: nothing off-box uses RTSP (the dashboard uses WebRTC)
+protocols: [tcp]                     # RTSP over TCP only: no UDP 8000/8001 listeners (8000 = recorder API)
+rtmp: no
+hls: no
+srt: no
+
+webrtc: yes
+webrtcAddress: 127.0.0.1:8889        # WHEP signalling, proxied by nginx at /webrtc/ (localhost only)
+webrtcLocalUDPAddress: :8189         # media (preferred)
+webrtcLocalTCPAddress: :8189         # media fallback when UDP is blocked
+# v3 A4: do NOT auto-gather interface IPs (would advertise docker bridge 172.17.0.1/172.18.0.1,
+# which a remote Tailscale browser cannot reach and which stalled/dropped the WebRTC session).
+webrtcIPsFromInterfaces: no
+# Addresses the browser can reach the Jetson on. Viewing is over Tailscale only, so advertise just the
+# Tailscale IP. The LAN IP <JETSON_LAN_IP> was removed 2026-10-25: the viewing PC is at another site and its
+# own Wi-Fi happens to be a 192.168.1.x subnet, so a <JETSON_LAN_IP> ICE candidate made the browser try to
+# reach a host that does not exist on its LAN -> connect failures / ICE flap (the v3 "reconnect" churn).
+# Factory install where the Dashboard is viewed over the local LAN: add the LAN IP back here.
+webrtcAdditionalHosts: [<JETSON_TAILSCALE_IP>, 172.20.10.7]
+
+paths:
+  # DeepStream serves rtsp://127.0.0.1:8555/cam01 (port 8555 because MediaMTX owns 8554)
+  cam01:
+    source: rtsp://127.0.0.1:8555/cam01
+    rtspTransport: tcp
+    sourceOnDemand: yes
+  # Second camera later:
+  # cam02:
+  #   source: rtsp://127.0.0.1:8555/cam02
+  #   rtspTransport: tcp
+  #   sourceOnDemand: yes

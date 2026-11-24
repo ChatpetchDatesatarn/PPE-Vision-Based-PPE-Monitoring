@@ -1,0 +1,32 @@
+{
+ "run": "yolov8n_ppe3_416",
+ "classes": [
+  "person",
+  "helmet",
+  "vest"
+ ],
+ "train_imgsz": 416,
+ "export_hw": [
+  256,
+  416
+ ],
+ "opset": 12,
+ "deepstream_yolo_commit": "2894babce8e7",
+ "ultralytics": "8.4.177",
+ "recommended_conf": 0.52,
+ "metrics": {
+  "run": "yolov8n_ppe3_416",
+  "GFLOPs@416x256": 2.28,
+  "params(M)": 3.14,
+  "mAP50": 0.876,
+  "mAP50-95": 0.634,
+  "AP50 person": 0.932,
+  "AP50 helmet": 0.816,
+  "AP50 vest": 0.88,
+  "mAP50 night(gray)": 0.839,
+  "AP50 helmet night": 0.789,
+  "best_conf": 0.52,
+  "F1@best": 0.845
+ },
+ "exported": "2026-10-15T12:26:01"
+}

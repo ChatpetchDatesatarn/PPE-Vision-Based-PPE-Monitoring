@@ -1,0 +1,12 @@
+# Claude Code (ARM64) — newer Ubuntu inside the container, bypassing the host's Ubuntu 18.04 limitation
+FROM ubuntu:22.04
+ENV DEBIAN_FRONTEND=noninteractive TZ=Asia/Bangkok
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates curl git openssh-client nano less ripgrep tzdata \
+        python3 python3-pip mosquitto-clients docker.io \
+    && rm -rf /var/lib/apt/lists/*
+RUN pip3 install --no-cache-dir paho-mqtt
+RUN curl -fsSL https://claude.ai/install.sh | bash
+ENV PATH=/root/.local/bin:$PATH
+WORKDIR /workspace
+CMD ["sleep", "infinity"]

@@ -1,0 +1,4 @@
+FROM python:3.11-slim
+RUN pip install --no-cache-dir Jetson.GPIO paho-mqtt
+COPY 10_jetson/jetson_alert.py /app/jetson_alert.py
+ENV PYTHONUNBUFFERED=1

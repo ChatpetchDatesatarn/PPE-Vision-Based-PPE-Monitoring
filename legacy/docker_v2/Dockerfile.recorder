@@ -1,0 +1,5 @@
+FROM python:3.11-slim
+RUN pip install --no-cache-dir paho-mqtt
+COPY 10_jetson/recorder.py /app/recorder.py
+ENV PYTHONUNBUFFERED=1
+CMD ["python3", "/app/recorder.py"]

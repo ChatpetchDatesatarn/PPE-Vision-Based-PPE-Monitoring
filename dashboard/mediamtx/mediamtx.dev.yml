@@ -1,0 +1,28 @@
+# MediaMTX 1.9.x (-ffmpeg image) — PC DEVELOPMENT. Loops ./media/test.mp4 as cam01 and cam02.
+# Re-encodes to H.264 baseline, no B-frames, keyframe every 30 frames (same as the Jetson output).
+logLevel: info
+
+api: yes
+apiAddress: :9997
+
+rtsp: yes
+rtspAddress: :8554
+protocols: [tcp]                     # RTSP over TCP only: no UDP 8000/8001 listeners (8000 = recorder API)
+rtmp: no
+hls: no
+srt: no
+
+webrtc: yes
+webrtcAddress: :8889
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: :8189
+# Browser on the same PC. Add the PC's LAN IP to test from a phone, e.g. [127.0.0.1, <LAN_IP>]
+webrtcAdditionalHosts: [127.0.0.1]
+
+paths:
+  cam01:
+    runOnInit: ffmpeg -re -stream_loop -1 -i /media/test.mp4 -an -c:v libx264 -preset veryfast -tune zerolatency -profile:v baseline -bf 0 -g 30 -r 30 -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    runOnInitRestart: yes
+  cam02:
+    runOnInit: ffmpeg -re -stream_loop -1 -i /media/test.mp4 -an -c:v libx264 -preset veryfast -tune zerolatency -profile:v baseline -bf 0 -g 30 -r 30 -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    runOnInitRestart: yes

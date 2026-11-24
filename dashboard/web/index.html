@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>AI Smart Safety Monitoring</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5z' fill='%233b82f6'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/app.css">
+  <!-- Local libraries only (see lib/VERSIONS.txt) -->
+  <script src="lib/mqtt.min.js"></script>
+  <script src="lib/chart.umd.min.js"></script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <svg viewBox="0 0 24 24" width="34" height="34" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8.5 12.2l2.4 2.4 4.8-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <div class="brand-text"><strong>Smart Safety</strong><span>AI PPE Monitoring</span></div>
+      </div>
+      <nav class="nav" aria-label="Main menu">
+        <a href="#/dashboard" data-nav="dashboard">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1z"/></svg><span>Overview</span></a>
+        <a href="#/live" data-nav="live">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="M16 10l6-3v10l-6-3z"/></svg><span>Live View</span></a>
+        <a href="#/events" data-nav="events">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v15H6z"/><path d="M9 12h8M9 16h8M9 8h4" class="ln"/></svg><span>Events</span></a>
+        <a href="#/report" data-nav="report">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10h3v10zM10.5 20V4h3v16zM17 20v-7h3v7z"/></svg><span>Reports</span></a>
+        <a href="#/settings" data-nav="settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 110 7 3.5 3.5 0 010-7zm8.4 2.1l-1.9-.4a6.8 6.8 0 00-.7-1.7l1.1-1.6-1.8-1.8-1.6 1.1a6.8 6.8 0 00-1.7-.7l-.4-1.9h-2.6l-.4 1.9a6.8 6.8 0 00-1.7.7L7.1 5.1 5.3 6.9l1.1 1.6a6.8 6.8 0 00-.7 1.7l-1.9.4v2.6l1.9.4c.2.6.4 1.2.7 1.7l-1.1 1.6 1.8 1.8 1.6-1.1c.5.3 1.1.5 1.7.7l.4 1.9h2.6l.4-1.9c.6-.2 1.2-.4 1.7-.7l1.6 1.1 1.8-1.8-1.1-1.6c.3-.5.5-1.1.7-1.7l1.9-.4z" fill-rule="evenodd"/></svg><span>Settings</span></a>
+      </nav>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <h1 class="title">AI Smart Safety Monitoring</h1>
+        <div class="lights" aria-label="System status">
+          <div class="light" data-light="camera" data-level="unknown"><span class="lamp"></span><span class="light-name">Camera</span><span class="light-val">—</span></div>
+          <div class="light" data-light="perception" data-level="unknown"><span class="lamp"></span><span class="light-name">Perception</span><span class="light-val">—</span></div>
+          <div class="light" data-light="decision" data-level="unknown"><span class="lamp"></span><span class="light-name">Decision</span><span class="light-val">—</span></div>
+          <div class="light" data-light="livevideo" data-level="unknown"><span class="lamp"></span><span class="light-name">Live Video</span><span class="light-val">—</span></div>
+        </div>
+        <div class="clock-box"><div id="clock" class="clock mono">--:--:--</div><div id="clock-date" class="clock-date mono"></div><div id="clock-skew" class="clock-skew" hidden></div></div>
+        <button id="sound-btn" class="icon-btn sound-btn" type="button" aria-pressed="true" aria-label="Alarm sound on/off">
+          <svg class="snd-on" viewBox="0 0 24 24" width="24" height="24"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16 8.5a5 5 0 010 7M18.5 6a8.5 8.5 0 010 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <svg class="snd-off" viewBox="0 0 24 24" width="24" height="24" style="display:none"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16.5 9.5l5 5M21.5 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </header>
+      <div id="conn-banner" class="conn-banner" role="alert" hidden></div>
+      <main id="page" class="page"></main>
+    </div>
+  </div>
+  <div id="modal-root"></div>
+  <div id="toast-root" class="toast-root" aria-live="polite"></div>
+  <noscript>JavaScript is required for this page</noscript>
+  <script>
+    // ES modules, /api and /mqtt cannot work from file:// — explain instead of showing a blank page
+    if (location.protocol === "file:") {
+      document.getElementById("page").innerHTML =
+        '<div class="card error-box" style="max-width:720px">' +
+        '<h2 style="margin-top:0">Open this page through the web server, not by double-clicking the file</h2>' +
+        '<p>This page was opened from <code>file://</code>, so the browser cannot load JavaScript modules or call /api and /mqtt</p>' +
+        '<p>Open <b>http://localhost:8080</b> instead (nginx from docker-compose.dev.yml or dev_mock/mock_server.py)</p></div>';
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+# nvinfer config for the YOLOv8n COCO fps benchmark — FP16, batch 1, input 416x256 (WxH)
+# Based on DeepStream-Yolo/config_infer_primary_yoloV8.txt
+# ONNX made on the PC with DeepStream-Yolo/utils/export_yoloV8.py -s 256 416 --opset 12 --simplify
+# Model files live in ../models/ (not synced); the engine is built on the Jetson on the first run
+
+[property]
+gpu-id=0
+net-scale-factor=0.0039215697906911373
+model-color-format=0
+onnx-file=../models/yolov8n_coco_416x256.onnx
+model-engine-file=../models/yolov8n_coco_416x256_b1_gpu0_fp16.engine
+labelfile-path=../models/labels_coco.txt
+batch-size=1
+# 2 = FP16
+network-mode=2
+num-detected-classes=80
+interval=0
+gie-unique-id=1
+process-mode=1
+network-type=0
+cluster-mode=2
+maintain-aspect-ratio=1
+symmetric-padding=1
+parse-bbox-func-name=NvDsInferParseYolo
+custom-lib-path=../DeepStream-Yolo/nvdsinfer_custom_impl_Yolo/libnvdsinfer_custom_impl_Yolo.so
+engine-create-func-name=NvDsInferYoloCudaEngineGet
+
+[class-attrs-all]
+nms-iou-threshold=0.45
+pre-cluster-threshold=0.25
+topk=300
