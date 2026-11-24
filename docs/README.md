@@ -2,6 +2,7 @@
 
 | ไฟล์ | เนื้อหา |
 |---|---|
+| [`FOLDER_GUIDE.md`](FOLDER_GUIDE.md) | คู่มือโครงสร้างโฟลเดอร์: แต่ละโฟลเดอร์คืออะไร มีไว้ทำไม และอยากทำอะไรควรไปที่ไหน |
 | [`mqtt_spec.md`](mqtt_spec.md) | สเปก MQTT v3: topic, payload, QoS/retain และกฎ fallback (ข้อตกลงกลางของทุกส่วน) |
 | [`design_v3_low_latency.md`](design_v3_low_latency.md) | การออกแบบ v3: แยก Perception (DeepStream) กับ Decision (CiRA), ภาพสดผ่าน WebRTC, เหตุผลที่เลือกกล้อง RTSP |
 | [`proposal/`](proposal/) | ข้อเสนอโครงการ |

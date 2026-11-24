@@ -40,7 +40,7 @@ rtspsrc (Tapo stream1 1080p) → nvstreammux 1280×720 → nvinfer #1 (YOLOv8n C
 
 ## โมเดล
 
-ไฟล์ weight ไม่อยู่ใน repo ให้วาง ONNX ไว้ใน `models/yolov8n_ppe3_416/` (export จาก `.pt` ด้วย `export/export_ds_yolov8.py` หรือ `models/*/run_export.py`) และใช้ YOLOv8n COCO 320×192 สำหรับตรวจคน TensorRT engine จะถูก build บน Jetson ตอนรันครั้งแรก (build บน PC แล้วคัดลอกมาใช้ไม่ได้) ผลเทรนของโมเดลดูที่ [`../training/`](../training/)
+ไฟล์ weight ไม่อยู่ใน repo ให้วาง ONNX ไว้ใน `models/yolov8n_ppe3_416/` (export จาก `.pt` ด้วย `export/export_ds_yolov8.py` หรือ `models/*/run_export.py`) ตัวตรวจคนใช้ YOLOv8n COCO 320×192: วาง `models/yolov8n_coco_320x192.onnx` และ `models/labels_coco.txt` ตามที่ `test/config_infer_cam_person_320.txt` อ้างถึง TensorRT engine จะถูก build บน Jetson ตอนรันครั้งแรก (build บน PC แล้วคัดลอกมาใช้ไม่ได้) ผลเทรนของโมเดลดูที่ [`../training/`](../training/)
 
 ## รัน
 

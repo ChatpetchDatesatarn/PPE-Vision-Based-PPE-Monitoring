@@ -36,7 +36,7 @@
 
 ![ผลเทรน YOLOv8n](../docs/images/training_yolov8n.png)
 
-ตอนใช้งานจริงแอปใช้ YOLOv8n COCO 320×192 ตรวจคน และใช้โมเดลนี้ตรวจเฉพาะหมวก/เสื้อ เกณฑ์ความมั่นใจ: person 0.30, helmet 0.40, vest 0.35 (ดู [`docs/test-results/2026-10-26_model_architecture/`](../docs/test-results/2026-10-26_model_architecture/))
+ตอนใช้งานจริงแอปใช้ YOLOv8n COCO 320×192 ตรวจคน (เกณฑ์ความมั่นใจ 0.35 ใน `perception/test/config_infer_cam_person_320.txt`) และใช้โมเดลนี้ตรวจเฉพาะหมวก/เสื้อ (helmet 0.40, vest 0.35 ใน `perception/models/yolov8n_ppe3_416/config_infer_yolov8n_ppe3_hv.txt`) (ดู [`docs/test-results/2026-10-26_model_architecture/`](../docs/test-results/2026-10-26_model_architecture/))
 
 ## ไฟล์อื่น
 
